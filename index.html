@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <link rel="manifest" href="manifest.json">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Farm App</title>
+  <style>
+    body { font-family: Arial; background: #f5f7fa; padding: 20px; }
+    .container { max-width: 500px; margin: auto; background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    input, select, button { width: 100%; padding: 10px; margin: 5px 0 15px 0; border-radius: 8px; border: 1px solid #ccc; }
+    button { background: #27ae60; color: white; border: none; cursor: pointer; }
+    button:hover { background: #219150; }
+    ul { list-style: none; padding: 0; }
+    li { background: #ecf0f1; padding: 10px; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .feld-info { flex-grow: 1; }
+    .actions button { width: 70px; margin-left: 5px; font-size: 14px; padding: 5px; }
+    .edit-btn { background: #f39c12; color: white; }
+    .delete-btn { background: #e74c3c; color: white; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Feld hinzufügen / bearbeiten</h2>
+
+  <input id="feldName" placeholder="Feld Name">
+  <select id="pflanze">
+    <option value="90">Karotte (90 Tage)</option>
+    <option value="120">Mais (120 Tage)</option>
+    <option value="60">Salat (60 Tage)</option>
+  </select>
+  <input type="date" id="datum">
+
+  <button onclick="speichern()">Speichern</button>
+
+  <h3>Gespeicherte Felder:</h3>
+  <ul id="liste"></ul>
+</div>
+
+<script>
+    if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js')
+  .then(() => console.log('Service Worker registriert!'))
+  .catch(err => console.log('Service Worker Fehler:', err));
+}
+let felder = JSON.parse(localStorage.getItem("felder")) || [];
+let bearbeiteIndex = null;
+
+function speichern() {
+  const name = document.getElementById("feldName").value;
+  const tage = parseInt(document.getElementById("pflanze").value);
+  const datum = document.getElementById("datum").value;
+  if(!name || !datum) { alert("Bitte Feldname und Datum eingeben"); return; }
+
+  const ernteDatum = new Date(datum);
+  ernteDatum.setDate(ernteDatum.getDate() + tage);
+
+  const feldObj = { name, pflanze: document.getElementById("pflanze").selectedOptions[0].text, ernte: ernteDatum.toDateString() };
+
+  if (bearbeiteIndex !== null) {
+    felder[bearbeiteIndex] = feldObj;
+    bearbeiteIndex = null;
+  } else {
+    felder.push(feldObj);
+  }
+
+  localStorage.setItem("felder", JSON.stringify(felder));
+  anzeigen();
+  document.getElementById("feldName").value = "";
+  document.getElementById("datum").value = "";
+}
+
+function anzeigen() {
+  const liste = document.getElementById("liste");
+  liste.innerHTML = "";
+  felder.forEach((f, i) => {
+    const li = document.createElement("li");
+    const info = document.createElement("div"); info.className = "feld-info";
+    info.innerHTML = `<strong>${f.name}</strong> - ${f.pflanze} → Ernte: ${f.ernte}`;
+
+    const actions = document.createElement("div"); actions.className = "actions";
+    const editBtn = document.createElement("button"); editBtn.textContent = "Bearbeiten"; editBtn.className="edit-btn"; editBtn.onclick = () => bearbeiten(i);
+    const deleteBtn = document.createElement("button"); deleteBtn.textContent="Löschen"; deleteBtn.className="delete-btn"; deleteBtn.onclick=()=>loeschen(i);
+
+    actions.appendChild(editBtn); actions.appendChild(deleteBtn);
+    li.appendChild(info); li.appendChild(actions);
+    liste.appendChild(li);
+  });
+  checkErnte();
+}
+
+function bearbeiten(index) {
+  document.getElementById("feldName").value = felder[index].name;
+  document.getElementById("datum").value = new Date(felder[index].ernte).toISOString().slice(0,10);
+  bearbeiteIndex = index;
+}
+
+function loeschen(index) { if(confirm("Feld wirklich löschen?")) { felder.splice(index,1); localStorage.setItem("felder", JSON.stringify(felder)); anzeigen(); } }
+
+// --- Push Notification prüfen ---
+function benachrichtigungErlauben() {
+  if(Notification.permission === 'default') Notification.requestPermission();
+}
+benachrichtigungErlauben();
+
+// --- Prüfen ob Pflanzen erntereif sind ---
+function checkErnte() {
+  const heute = new Date();
+  felder.forEach(f => {
+    const ernteDatum = new Date(f.ernte);
+    if(ernteDatum.toDateString() === heute.toDateString()) {
+      if(Notification.permission === 'granted') {
+        new Notification("Erntezeit!", { body:`${f.name} (${f.pflanze}) ist heute erntereif 🌾` });
+      }
+    }
+  });
+}
+
+anzeigen();
+</script>
+
+</body>
+</html>
